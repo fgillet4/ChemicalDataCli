@@ -1,3 +1,0 @@
-User-agent: *
-
-Sitemap: https://fluids.readthedocs.io/sitemap2.xml

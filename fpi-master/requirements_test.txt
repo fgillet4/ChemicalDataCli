@@ -1,5 +1,0 @@
-fluids
-scipy
-pytest
-pytest-cov
-coveralls
