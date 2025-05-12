@@ -1,0 +1,16 @@
+scipy
+pytest
+pytest-cov
+coveralls
+sympy
+fuzzywuzzy
+pint
+pytz
+numpy
+pandas
+IPython
+sphinx
+wheel
+mpmath
+fluids>=1.1.0
+matplotlib
