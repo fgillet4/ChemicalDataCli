@@ -267,14 +267,15 @@ def vapor_pressure_table_menu():
         
         if results and len(results) > 0:
             print(f"\nVapor Pressure Table for {cas_or_name}")
-            print("=" * 80)
-            print(f"{'Temp (K)':>10} {'Temp (°C)':>10} {'Pressure (Pa)':>15} {'Pressure (bar)':>15} {'Pressure (mmHg)':>15} {'Pressure (kPa)':>15}")
-            print("-" * 80)
+            print("=" * 100)
+            print(f"{'Temp (K)':>10} {'Temp (°C)':>10} {'Pressure (Pa)':>15} {'Pressure (bar)':>15} {'Pressure (mmHg)':>15} {'Pressure (kPa)':>15} {'Method':>20}")
+            print("-" * 100)
             
             for row in results:
                 print(f"{row['temperature_K']:>10.2f} {row['temperature_C']:>10.2f} "
                       f"{row['pressure_Pa']:>15.2e} {row['pressure_bar']:>15.6f} "
-                      f"{row['pressure_mmHg']:>15.2f} {row['pressure_kPa']:>15.2f}")
+                      f"{row['pressure_mmHg']:>15.2f} {row['pressure_kPa']:>15.2f} "
+                      f"{row['method']:>20}")
             
             print(f"\nGenerated {len(results)} data points")
             
@@ -285,7 +286,7 @@ def vapor_pressure_table_menu():
                 try:
                     import csv
                     with open(f"{filename}.csv", 'w', newline='') as csvfile:
-                        fieldnames = ['temperature_K', 'temperature_C', 'pressure_Pa', 'pressure_bar', 'pressure_mmHg', 'pressure_kPa']
+                        fieldnames = ['temperature_K', 'temperature_C', 'pressure_Pa', 'pressure_bar', 'pressure_mmHg', 'pressure_kPa', 'method']
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                         writer.writeheader()
                         for row in results:
@@ -355,6 +356,9 @@ Chemical Data CLI
             input("\nPress Enter to continue...")
             
         elif choice == '8':
+            vapor_pressure_table_menu()
+            
+        elif choice == '9':
             print("Exiting. Thank you for using Chemical Data CLI!")
             break
             

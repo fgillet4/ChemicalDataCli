@@ -147,32 +147,124 @@ def calculate_property(property_key, cas_or_name):
         return None
 
 def calculate_vapor_pressure_table(cas, T_start=273.15, T_end=373.15, T_step=10):
-    """Calculate vapor pressure table for a chemical over a temperature range."""
+    """Calculate vapor pressure table for a chemical over a temperature range using multiple methods."""
     try:
         # Import necessary functions
-        from chemicals import vapor_pressure, identifiers
+        from chemicals import vapor_pressure, identifiers, critical, acentric, phase_change
+        import numpy as np
         
         results = []
         current_T = T_start
+        successful_methods = []
         
         while current_T <= T_end:
+            psat = None
+            method_used = None
+            
+            # Method 1: Try the main Psat function (uses best available data)
             try:
-                # Try to get vapor pressure at this temperature
                 psat = vapor_pressure.Psat(cas, T=current_T)
-                if psat is not None:
-                    results.append({
-                        'temperature_K': current_T,
-                        'temperature_C': current_T - 273.15,
-                        'pressure_Pa': psat,
-                        'pressure_bar': psat / 100000,
-                        'pressure_mmHg': psat * 760 / 101325,
-                        'pressure_kPa': psat / 1000
-                    })
+                if psat is not None and psat > 0:
+                    method_used = "Psat (best available)"
             except:
-                # If calculation fails for this temperature, skip it
                 pass
             
+            # Method 2: Try Lee-Kesler correlation if we have critical properties
+            if psat is None:
+                try:
+                    Tc = critical.Tc(cas)
+                    Pc = critical.Pc(cas) 
+                    omega = acentric.omega(cas)
+                    if all(x is not None for x in [Tc, Pc, omega]):
+                        psat = vapor_pressure.Lee_Kesler(current_T, Tc, Pc, omega)
+                        if psat is not None and psat > 0:
+                            method_used = "Lee-Kesler"
+                except:
+                    pass
+            
+            # Method 3: Try Ambrose-Walton correlation
+            if psat is None:
+                try:
+                    Tc = critical.Tc(cas)
+                    Pc = critical.Pc(cas)
+                    omega = acentric.omega(cas)
+                    if all(x is not None for x in [Tc, Pc, omega]):
+                        psat = vapor_pressure.Ambrose_Walton(current_T, Tc, Pc, omega)
+                        if psat is not None and psat > 0:
+                            method_used = "Ambrose-Walton"
+                except:
+                    pass
+            
+            # Method 4: Try boiling point relation if we have boiling point
+            if psat is None:
+                try:
+                    Tb = phase_change.Tb(cas)
+                    Tc = critical.Tc(cas)
+                    Pc = critical.Pc(cas)
+                    if all(x is not None for x in [Tb, Tc, Pc]):
+                        psat = vapor_pressure.boiling_critical_relation(current_T, Tb, Tc, Pc)
+                        if psat is not None and psat > 0:
+                            method_used = "Boiling-Critical Relation"
+                except:
+                    pass
+            
+            # Method 5: Try Sanjari correlation (for refrigerants but may work for others)
+            if psat is None:
+                try:
+                    Tc = critical.Tc(cas)
+                    Pc = critical.Pc(cas)
+                    omega = acentric.omega(cas)
+                    if all(x is not None for x in [Tc, Pc, omega]):
+                        psat = vapor_pressure.Sanjari(current_T, Tc, Pc, omega)
+                        if psat is not None and psat > 0:
+                            method_used = "Sanjari"
+                except:
+                    pass
+            
+            # Method 6: Try Edalat correlation
+            if psat is None:
+                try:
+                    Tc = critical.Tc(cas)
+                    Pc = critical.Pc(cas)
+                    omega = acentric.omega(cas)
+                    if all(x is not None for x in [Tc, Pc, omega]):
+                        psat = vapor_pressure.Edalat(current_T, Tc, Pc, omega)
+                        if psat is not None and psat > 0:
+                            method_used = "Edalat"
+                except:
+                    pass
+            
+            # Method 7: Try water-specific IAPWS method for water
+            if psat is None and cas == "7732-18-5":  # Water CAS number
+                try:
+                    if 273.15 <= current_T <= 647.096:  # Valid range for IAPWS
+                        psat = vapor_pressure.Psat_IAPWS(current_T)
+                        if psat is not None and psat > 0:
+                            method_used = "IAPWS (water-specific)"
+                except:
+                    pass
+            
+            # If we got a valid result, add it to the table
+            if psat is not None and psat > 0:
+                results.append({
+                    'temperature_K': current_T,
+                    'temperature_C': current_T - 273.15,
+                    'pressure_Pa': psat,
+                    'pressure_bar': psat / 100000,
+                    'pressure_mmHg': psat * 760 / 101325,
+                    'pressure_kPa': psat / 1000,
+                    'method': method_used
+                })
+                
+                # Track which methods worked
+                if method_used not in successful_methods:
+                    successful_methods.append(method_used)
+            
             current_T += T_step
+        
+        # Print information about methods used
+        if successful_methods:
+            print(f"Successfully calculated vapor pressures using: {', '.join(successful_methods)}")
         
         return results
         
