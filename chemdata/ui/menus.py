@@ -7,7 +7,7 @@ from chemicals import identifiers
 
 from chemdata.utils.validators import is_valid_cas
 from chemdata.core.chemical_data import lookup_chemical, search_chemicals, get_all_properties
-from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property
+from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property, calculate_vapor_pressure_table
 from chemdata.calculators.reaction_calculator import get_reaction_calculators, calculate_reaction_property
 from chemdata.calculators.element_calculator import get_element_data
 from chemdata.ui.formatters import print_section_header, print_property, format_value
@@ -223,6 +223,83 @@ def element_lookup_menu():
         except Exception as e:
             print(f"Error looking up element {element}: {e}")
 
+def vapor_pressure_table_menu():
+    """Menu for calculating vapor pressure tables"""
+    print_section_header("Vapor Pressure Table Calculator", "-")
+    
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        # Validate and convert to CAS if necessary
+        cas = None
+        if is_valid_cas(cas_or_name):
+            cas = cas_or_name
+        else:
+            try:
+                cas = identifiers.CAS_from_any(cas_or_name)
+            except:
+                print(f"Could not find chemical: {cas_or_name}")
+                continue
+        
+        # Get temperature range inputs
+        try:
+            T_start = float(input("Enter starting temperature in K (default 273.15): ") or 273.15)
+            T_end = float(input("Enter ending temperature in K (default 373.15): ") or 373.15)
+            T_step = float(input("Enter temperature step in K (default 10): ") or 10)
+            
+            if T_start >= T_end:
+                print("Starting temperature must be less than ending temperature.")
+                continue
+                
+            if T_step <= 0:
+                print("Temperature step must be positive.")
+                continue
+                
+        except ValueError:
+            print("Invalid temperature input. Please enter numeric values.")
+            continue
+        
+        # Calculate vapor pressure table
+        print(f"\nCalculating vapor pressure table for {cas_or_name} (CAS: {cas})...")
+        results = calculate_vapor_pressure_table(cas, T_start, T_end, T_step)
+        
+        if results and len(results) > 0:
+            print(f"\nVapor Pressure Table for {cas_or_name}")
+            print("=" * 80)
+            print(f"{'Temp (K)':>10} {'Temp (°C)':>10} {'Pressure (Pa)':>15} {'Pressure (bar)':>15} {'Pressure (mmHg)':>15} {'Pressure (kPa)':>15}")
+            print("-" * 80)
+            
+            for row in results:
+                print(f"{row['temperature_K']:>10.2f} {row['temperature_C']:>10.2f} "
+                      f"{row['pressure_Pa']:>15.2e} {row['pressure_bar']:>15.6f} "
+                      f"{row['pressure_mmHg']:>15.2f} {row['pressure_kPa']:>15.2f}")
+            
+            print(f"\nGenerated {len(results)} data points")
+            
+            # Ask if user wants to save to file
+            save_choice = input("\nWould you like to save this table to a CSV file? (y/n): ").lower()
+            if save_choice in ['y', 'yes']:
+                filename = input("Enter filename (without extension): ") or f"vapor_pressure_{cas}"
+                try:
+                    import csv
+                    with open(f"{filename}.csv", 'w', newline='') as csvfile:
+                        fieldnames = ['temperature_K', 'temperature_C', 'pressure_Pa', 'pressure_bar', 'pressure_mmHg', 'pressure_kPa']
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        for row in results:
+                            writer.writerow(row)
+                    print(f"Table saved as {filename}.csv")
+                except Exception as e:
+                    print(f"Error saving file: {e}")
+        else:
+            print(f"No vapor pressure data available for {cas_or_name} in the specified temperature range.")
+            print("This could be because:")
+            print("- The chemical is not in the vapor pressure database")
+            print("- The temperature range is outside the valid range for this chemical")
+            print("- The chemical may be a solid at these temperatures")
+
 def main_menu():
     """Main menu for the chemical data CLI"""
     while True:
@@ -237,7 +314,8 @@ Chemical Data CLI
 5. Reaction property calculator
 6. Look up element data from the periodic table
 7. Get ALL available properties for a chemical
-8. Exit
+8. Calculate vapor pressure tables
+9. Exit
         """)
         
         choice = input("Enter your choice: ")

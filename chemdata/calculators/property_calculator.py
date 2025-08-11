@@ -145,3 +145,37 @@ def calculate_property(property_key, cas_or_name):
             print("Note: Try using heat of fusion which is more widely available.")
             
         return None
+
+def calculate_vapor_pressure_table(cas, T_start=273.15, T_end=373.15, T_step=10):
+    """Calculate vapor pressure table for a chemical over a temperature range."""
+    try:
+        # Import necessary functions
+        from chemicals import vapor_pressure, identifiers
+        
+        results = []
+        current_T = T_start
+        
+        while current_T <= T_end:
+            try:
+                # Try to get vapor pressure at this temperature
+                psat = vapor_pressure.Psat(cas, T=current_T)
+                if psat is not None:
+                    results.append({
+                        'temperature_K': current_T,
+                        'temperature_C': current_T - 273.15,
+                        'pressure_Pa': psat,
+                        'pressure_bar': psat / 100000,
+                        'pressure_mmHg': psat * 760 / 101325,
+                        'pressure_kPa': psat / 1000
+                    })
+            except:
+                # If calculation fails for this temperature, skip it
+                pass
+            
+            current_T += T_step
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error calculating vapor pressure table: {e}")
+        return None
