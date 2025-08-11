@@ -271,3 +271,187 @@ def calculate_vapor_pressure_table(cas, T_start=273.15, T_end=373.15, T_step=10)
     except Exception as e:
         print(f"Error calculating vapor pressure table: {e}")
         return None
+
+def compare_vapor_pressure_methods(cas, T):
+    """Compare all available vapor pressure calculation methods at a single temperature."""
+    try:
+        from chemicals import vapor_pressure, identifiers, critical, acentric, phase_change
+        
+        results = {}
+        
+        # Method 1: Main Psat function
+        try:
+            psat = vapor_pressure.Psat(cas, T=T)
+            if psat is not None and psat > 0:
+                results["Psat (best available)"] = psat
+        except Exception as e:
+            results["Psat (best available)"] = f"Failed: {str(e)}"
+        
+        # Get critical properties once for reuse
+        try:
+            Tc = critical.Tc(cas)
+            Pc = critical.Pc(cas)
+            omega = acentric.omega(cas)
+        except:
+            Tc = Pc = omega = None
+        
+        # Method 2: Lee-Kesler
+        if all(x is not None for x in [Tc, Pc, omega]):
+            try:
+                psat = vapor_pressure.Lee_Kesler(T, Tc, Pc, omega)
+                if psat is not None and psat > 0:
+                    results["Lee-Kesler"] = psat
+                else:
+                    results["Lee-Kesler"] = "Invalid result"
+            except Exception as e:
+                results["Lee-Kesler"] = f"Failed: {str(e)}"
+        else:
+            results["Lee-Kesler"] = "Missing critical properties"
+        
+        # Method 3: Ambrose-Walton
+        if all(x is not None for x in [Tc, Pc, omega]):
+            try:
+                psat = vapor_pressure.Ambrose_Walton(T, Tc, Pc, omega)
+                if psat is not None and psat > 0:
+                    results["Ambrose-Walton"] = psat
+                else:
+                    results["Ambrose-Walton"] = "Invalid result"
+            except Exception as e:
+                results["Ambrose-Walton"] = f"Failed: {str(e)}"
+        else:
+            results["Ambrose-Walton"] = "Missing critical properties"
+        
+        # Method 4: Boiling-Critical Relation
+        try:
+            Tb = phase_change.Tb(cas)
+            if all(x is not None for x in [Tb, Tc, Pc]):
+                psat = vapor_pressure.boiling_critical_relation(T, Tb, Tc, Pc)
+                if psat is not None and psat > 0:
+                    results["Boiling-Critical"] = psat
+                else:
+                    results["Boiling-Critical"] = "Invalid result"
+            else:
+                results["Boiling-Critical"] = "Missing boiling point or critical properties"
+        except Exception as e:
+            results["Boiling-Critical"] = f"Failed: {str(e)}"
+        
+        # Method 5: Sanjari
+        if all(x is not None for x in [Tc, Pc, omega]):
+            try:
+                psat = vapor_pressure.Sanjari(T, Tc, Pc, omega)
+                if psat is not None and psat > 0:
+                    results["Sanjari"] = psat
+                else:
+                    results["Sanjari"] = "Invalid result"
+            except Exception as e:
+                results["Sanjari"] = f"Failed: {str(e)}"
+        else:
+            results["Sanjari"] = "Missing critical properties"
+        
+        # Method 6: Edalat
+        if all(x is not None for x in [Tc, Pc, omega]):
+            try:
+                psat = vapor_pressure.Edalat(T, Tc, Pc, omega)
+                if psat is not None and psat > 0:
+                    results["Edalat"] = psat
+                else:
+                    results["Edalat"] = "Invalid result"
+            except Exception as e:
+                results["Edalat"] = f"Failed: {str(e)}"
+        else:
+            results["Edalat"] = "Missing critical properties"
+        
+        # Method 7: IAPWS for water
+        if cas == "7732-18-5":  # Water
+            try:
+                if 273.15 <= T <= 647.096:
+                    psat = vapor_pressure.Psat_IAPWS(T)
+                    if psat is not None and psat > 0:
+                        results["IAPWS (water)"] = psat
+                    else:
+                        results["IAPWS (water)"] = "Invalid result"
+                else:
+                    results["IAPWS (water)"] = f"Outside valid range (273.15-647.096 K)"
+            except Exception as e:
+                results["IAPWS (water)"] = f"Failed: {str(e)}"
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error comparing vapor pressure methods: {e}")
+        return None
+
+def calculate_rotavapor_conditions(cas, T_values, P_values):
+    """Calculate vapor pressures for rotavapor conditions (temperature and pressure combinations)."""
+    try:
+        from chemicals import vapor_pressure, identifiers, critical, acentric, phase_change
+        
+        results = []
+        
+        for T in T_values:
+            for P in P_values:
+                # Calculate vapor pressure at this temperature
+                psat = None
+                method_used = None
+                
+                # Try multiple methods (same logic as before but condensed)
+                methods_to_try = [
+                    ("Psat", lambda: vapor_pressure.Psat(cas, T=T)),
+                ]
+                
+                # Add CSP methods if we have properties
+                try:
+                    Tc = critical.Tc(cas)
+                    Pc = critical.Pc(cas)
+                    omega = acentric.omega(cas)
+                    if all(x is not None for x in [Tc, Pc, omega]):
+                        methods_to_try.extend([
+                            ("Lee-Kesler", lambda: vapor_pressure.Lee_Kesler(T, Tc, Pc, omega)),
+                            ("Ambrose-Walton", lambda: vapor_pressure.Ambrose_Walton(T, Tc, Pc, omega)),
+                            ("Sanjari", lambda: vapor_pressure.Sanjari(T, Tc, Pc, omega)),
+                            ("Edalat", lambda: vapor_pressure.Edalat(T, Tc, Pc, omega)),
+                        ])
+                        
+                        # Add boiling point method
+                        try:
+                            Tb = phase_change.Tb(cas)
+                            if Tb is not None:
+                                methods_to_try.append(("Boiling-Critical", lambda: vapor_pressure.boiling_critical_relation(T, Tb, Tc, Pc)))
+                        except:
+                            pass
+                except:
+                    pass
+                
+                # Try methods until one works
+                for method_name, method_func in methods_to_try:
+                    try:
+                        psat = method_func()
+                        if psat is not None and psat > 0:
+                            method_used = method_name
+                            break
+                    except:
+                        continue
+                
+                if psat is not None:
+                    # Determine if evaporation will occur
+                    will_evaporate = psat > P
+                    evaporation_rate = "High" if psat > P * 2 else "Moderate" if psat > P * 1.2 else "Low" if psat > P else "None"
+                    
+                    results.append({
+                        'temperature_K': T,
+                        'temperature_C': T - 273.15,
+                        'system_pressure_Pa': P,
+                        'system_pressure_mbar': P / 100,
+                        'vapor_pressure_Pa': psat,
+                        'vapor_pressure_mbar': psat / 100,
+                        'pressure_ratio': psat / P,
+                        'will_evaporate': will_evaporate,
+                        'evaporation_rate': evaporation_rate,
+                        'method': method_used
+                    })
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error calculating rotavapor conditions: {e}")
+        return None

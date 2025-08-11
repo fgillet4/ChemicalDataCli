@@ -7,7 +7,7 @@ from chemicals import identifiers
 
 from chemdata.utils.validators import is_valid_cas
 from chemdata.core.chemical_data import lookup_chemical, search_chemicals, get_all_properties
-from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property, calculate_vapor_pressure_table
+from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property, calculate_vapor_pressure_table, compare_vapor_pressure_methods, calculate_rotavapor_conditions
 from chemdata.calculators.reaction_calculator import get_reaction_calculators, calculate_reaction_property
 from chemdata.calculators.element_calculator import get_element_data
 from chemdata.ui.formatters import print_section_header, print_property, format_value
@@ -223,10 +223,30 @@ def element_lookup_menu():
         except Exception as e:
             print(f"Error looking up element {element}: {e}")
 
-def vapor_pressure_table_menu():
-    """Menu for calculating vapor pressure tables"""
-    print_section_header("Vapor Pressure Table Calculator", "-")
-    
+def vapor_pressure_menu():
+    """Enhanced vapor pressure calculation menu with multiple options"""
+    while True:
+        print_section_header("Vapor Pressure Calculator", "-")
+        print("1. Generate vapor pressure table over temperature range")
+        print("2. Compare all vapor pressure calculation methods at single temperature")
+        print("3. Rotavapor conditions (temperature/pressure combinations)")
+        print("Type 'back' to return to the main menu.")
+        
+        choice = input("\nSelect option: ").lower()
+        
+        if choice == 'back':
+            break
+        elif choice == '1':
+            vapor_pressure_table_submenu()
+        elif choice == '2':
+            vapor_pressure_comparison_submenu()
+        elif choice == '3':
+            rotavapor_submenu()
+        else:
+            print("Invalid choice, please try again.")
+
+def vapor_pressure_table_submenu():
+    """Submenu for generating vapor pressure tables"""
     while True:
         cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
         if cas_or_name.lower() == 'back':
@@ -301,6 +321,168 @@ def vapor_pressure_table_menu():
             print("- The temperature range is outside the valid range for this chemical")
             print("- The chemical may be a solid at these temperatures")
 
+def vapor_pressure_comparison_submenu():
+    """Submenu for comparing all vapor pressure calculation methods"""
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        # Validate and convert to CAS if necessary
+        cas = None
+        if is_valid_cas(cas_or_name):
+            cas = cas_or_name
+        else:
+            try:
+                cas = identifiers.CAS_from_any(cas_or_name)
+            except:
+                print(f"Could not find chemical: {cas_or_name}")
+                continue
+        
+        # Get temperature input
+        try:
+            T = float(input("Enter temperature in K (default 298.15): ") or 298.15)
+        except ValueError:
+            print("Invalid temperature input. Please enter a numeric value.")
+            continue
+        
+        # Compare methods
+        print(f"\nComparing vapor pressure methods for {cas_or_name} (CAS: {cas}) at {T} K...")
+        results = compare_vapor_pressure_methods(cas, T)
+        
+        if results:
+            print(f"\nVapor Pressure Method Comparison at {T} K ({T-273.15:.2f} °C)")
+            print("=" * 80)
+            print(f"{'Method':>25} {'Result (Pa)':>20} {'Result (mbar)':>15} {'Result (mmHg)':>15}")
+            print("-" * 80)
+            
+            # Separate working methods from failed ones
+            working_methods = {}
+            failed_methods = {}
+            
+            for method, result in results.items():
+                if isinstance(result, (int, float)) and result > 0:
+                    working_methods[method] = result
+                else:
+                    failed_methods[method] = result
+            
+            # Display working methods first
+            for method, pressure in working_methods.items():
+                mbar = pressure / 100
+                mmHg = pressure * 760 / 101325
+                print(f"{method:>25} {pressure:>20.2e} {mbar:>15.2f} {mmHg:>15.2f}")
+            
+            # Display failed methods
+            if failed_methods:
+                print("\nFailed Methods:")
+                print("-" * 80)
+                for method, error in failed_methods.items():
+                    print(f"{method:>25} {str(error):>50}")
+            
+            # Show statistics for working methods
+            if len(working_methods) > 1:
+                values = list(working_methods.values())
+                avg = sum(values) / len(values)
+                min_val = min(values)
+                max_val = max(values)
+                std_dev = (sum((x - avg) ** 2 for x in values) / len(values)) ** 0.5
+                
+                print(f"\nStatistics for working methods:")
+                print(f"Average: {avg:.2e} Pa")
+                print(f"Min: {min_val:.2e} Pa")
+                print(f"Max: {max_val:.2e} Pa")
+                print(f"Standard deviation: {std_dev:.2e} Pa")
+                print(f"Coefficient of variation: {(std_dev/avg)*100:.1f}%")
+
+def rotavapor_submenu():
+    """Submenu for rotavapor conditions analysis"""
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        # Validate and convert to CAS if necessary
+        cas = None
+        if is_valid_cas(cas_or_name):
+            cas = cas_or_name
+        else:
+            try:
+                cas = identifiers.CAS_from_any(cas_or_name)
+            except:
+                print(f"Could not find chemical: {cas_or_name}")
+                continue
+        
+        print("\nRotavapor Condition Analysis")
+        print("Enter temperature and pressure ranges for your rotavapor setup")
+        
+        try:
+            # Temperature inputs
+            T_input = input("Enter temperatures in K (e.g., '293,313,333' or '293-333-20' for range): ")
+            if '-' in T_input:
+                parts = T_input.split('-')
+                T_start, T_end, T_step = float(parts[0]), float(parts[1]), float(parts[2])
+                T_values = [T_start + i * T_step for i in range(int((T_end - T_start) / T_step) + 1)]
+            else:
+                T_values = [float(T.strip()) for T in T_input.split(',')]
+            
+            # Pressure inputs
+            P_input = input("Enter pressures in Pa (e.g., '1000,5000,10000' or '1000-50000-5000' for range): ")
+            if '-' in P_input:
+                parts = P_input.split('-')
+                P_start, P_end, P_step = float(parts[0]), float(parts[1]), float(parts[2])
+                P_values = [P_start + i * P_step for i in range(int((P_end - P_start) / P_step) + 1)]
+            else:
+                P_values = [float(P.strip()) for P in P_input.split(',')]
+                
+        except ValueError:
+            print("Invalid input format. Please use commas or range format (start-end-step).")
+            continue
+        
+        # Calculate rotavapor conditions
+        print(f"\nAnalyzing rotavapor conditions for {cas_or_name} (CAS: {cas})...")
+        results = calculate_rotavapor_conditions(cas, T_values, P_values)
+        
+        if results and len(results) > 0:
+            print(f"\nRotavapor Conditions Analysis for {cas_or_name}")
+            print("=" * 130)
+            print(f"{'T(K)':>6} {'T(°C)':>7} {'Sys P(Pa)':>10} {'Sys P(mbar)':>12} {'Vap P(Pa)':>12} {'Vap P(mbar)':>12} {'P Ratio':>8} {'Evaporate':>10} {'Rate':>10} {'Method':>15}")
+            print("-" * 130)
+            
+            for row in results:
+                evap_symbol = "✓" if row['will_evaporate'] else "✗"
+                print(f"{row['temperature_K']:>6.1f} {row['temperature_C']:>7.1f} "
+                      f"{row['system_pressure_Pa']:>10.0f} {row['system_pressure_mbar']:>12.1f} "
+                      f"{row['vapor_pressure_Pa']:>12.2e} {row['vapor_pressure_mbar']:>12.1f} "
+                      f"{row['pressure_ratio']:>8.2f} {evap_symbol:>10} "
+                      f"{row['evaporation_rate']:>10} {row['method']:>15}")
+            
+            print(f"\nGenerated {len(results)} condition combinations")
+            print("\nLegend:")
+            print("✓ = Will evaporate (vapor pressure > system pressure)")
+            print("✗ = Will not evaporate")
+            print("Rate: None < Low < Moderate < High")
+            
+            # Ask if user wants to save to file
+            save_choice = input("\nWould you like to save this analysis to a CSV file? (y/n): ").lower()
+            if save_choice in ['y', 'yes']:
+                filename = input("Enter filename (without extension): ") or f"rotavapor_{cas}"
+                try:
+                    import csv
+                    with open(f"{filename}.csv", 'w', newline='') as csvfile:
+                        fieldnames = ['temperature_K', 'temperature_C', 'system_pressure_Pa', 'system_pressure_mbar',
+                                     'vapor_pressure_Pa', 'vapor_pressure_mbar', 'pressure_ratio', 
+                                     'will_evaporate', 'evaporation_rate', 'method']
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        for row in results:
+                            writer.writerow(row)
+                    print(f"Analysis saved as {filename}.csv")
+                except Exception as e:
+                    print(f"Error saving file: {e}")
+        else:
+            print(f"No vapor pressure data available for {cas_or_name}.")
+            print("Try using a different chemical or check the CAS number.")
+
 def main_menu():
     """Main menu for the chemical data CLI"""
     while True:
@@ -356,7 +538,7 @@ Chemical Data CLI
             input("\nPress Enter to continue...")
             
         elif choice == '8':
-            vapor_pressure_table_menu()
+            vapor_pressure_menu()
             
         elif choice == '9':
             print("Exiting. Thank you for using Chemical Data CLI!")
