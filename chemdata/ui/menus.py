@@ -7,7 +7,7 @@ from chemicals import identifiers
 
 from chemdata.utils.validators import is_valid_cas
 from chemdata.core.chemical_data import lookup_chemical, search_chemicals, get_all_properties
-from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property, calculate_vapor_pressure_table, compare_vapor_pressure_methods, calculate_rotavapor_conditions
+from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property, calculate_vapor_pressure_table, compare_vapor_pressure_methods, calculate_rotavapor_conditions, create_output_directory
 from chemdata.calculators.reaction_calculator import get_reaction_calculators, calculate_reaction_property
 from chemdata.calculators.element_calculator import get_element_data
 from chemdata.ui.formatters import print_section_header, print_property, format_value
@@ -302,16 +302,27 @@ def vapor_pressure_table_submenu():
             # Ask if user wants to save to file
             save_choice = input("\nWould you like to save this table to a CSV file? (y/n): ").lower()
             if save_choice in ['y', 'yes']:
-                filename = input("Enter filename (without extension): ") or f"vapor_pressure_{cas}"
+                filename = input("Enter filename (without extension): ") or f"vapor_pressure_table_{T_start}K-{T_end}K"
                 try:
                     import csv
-                    with open(f"{filename}.csv", 'w', newline='') as csvfile:
+                    import os
+                    from datetime import datetime
+                    
+                    # Create organized directory structure
+                    cas_dir = create_output_directory(cas)
+                    
+                    # Add timestamp to filename to avoid overwrites
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    full_filename = f"{filename}_{timestamp}.csv"
+                    filepath = os.path.join(cas_dir, full_filename)
+                    
+                    with open(filepath, 'w', newline='') as csvfile:
                         fieldnames = ['temperature_K', 'temperature_C', 'pressure_Pa', 'pressure_bar', 'pressure_mmHg', 'pressure_kPa', 'method']
                         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                         writer.writeheader()
                         for row in results:
                             writer.writerow(row)
-                    print(f"Table saved as {filename}.csv")
+                    print(f"Table saved as: {filepath}")
                 except Exception as e:
                     print(f"Error saving file: {e}")
         else:
@@ -393,6 +404,52 @@ def vapor_pressure_comparison_submenu():
                 print(f"Max: {max_val:.2e} Pa")
                 print(f"Standard deviation: {std_dev:.2e} Pa")
                 print(f"Coefficient of variation: {(std_dev/avg)*100:.1f}%")
+            
+            # Ask if user wants to save comparison to file
+            save_choice = input("\nWould you like to save this comparison to a CSV file? (y/n): ").lower()
+            if save_choice in ['y', 'yes']:
+                filename = input("Enter filename (without extension): ") or f"method_comparison_{T}K"
+                try:
+                    import csv
+                    import os
+                    from datetime import datetime
+                    
+                    # Create organized directory structure
+                    cas_dir = create_output_directory(cas)
+                    
+                    # Add timestamp to filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    full_filename = f"{filename}_{timestamp}.csv"
+                    filepath = os.path.join(cas_dir, full_filename)
+                    
+                    with open(filepath, 'w', newline='') as csvfile:
+                        fieldnames = ['method', 'result_Pa', 'result_mbar', 'result_mmHg', 'status']
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        
+                        # Write working methods
+                        for method, pressure in working_methods.items():
+                            writer.writerow({
+                                'method': method,
+                                'result_Pa': pressure,
+                                'result_mbar': pressure / 100,
+                                'result_mmHg': pressure * 760 / 101325,
+                                'status': 'Success'
+                            })
+                        
+                        # Write failed methods
+                        for method, error in failed_methods.items():
+                            writer.writerow({
+                                'method': method,
+                                'result_Pa': 'N/A',
+                                'result_mbar': 'N/A',
+                                'result_mmHg': 'N/A',
+                                'status': str(error)
+                            })
+                    
+                    print(f"Comparison saved as: {filepath}")
+                except Exception as e:
+                    print(f"Error saving file: {e}")
 
 def rotavapor_submenu():
     """Submenu for rotavapor conditions analysis"""
@@ -465,10 +522,23 @@ def rotavapor_submenu():
             # Ask if user wants to save to file
             save_choice = input("\nWould you like to save this analysis to a CSV file? (y/n): ").lower()
             if save_choice in ['y', 'yes']:
-                filename = input("Enter filename (without extension): ") or f"rotavapor_{cas}"
+                filename = input("Enter filename (without extension): ") or f"rotavapor_analysis"
                 try:
                     import csv
-                    with open(f"{filename}.csv", 'w', newline='') as csvfile:
+                    import os
+                    from datetime import datetime
+                    
+                    # Create organized directory structure
+                    cas_dir = create_output_directory(cas)
+                    
+                    # Add timestamp and temperature/pressure info to filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    T_range = f"{min(T_values):.0f}K-{max(T_values):.0f}K"
+                    P_range = f"{min(P_values):.0f}Pa-{max(P_values):.0f}Pa"
+                    full_filename = f"{filename}_{T_range}_{P_range}_{timestamp}.csv"
+                    filepath = os.path.join(cas_dir, full_filename)
+                    
+                    with open(filepath, 'w', newline='') as csvfile:
                         fieldnames = ['temperature_K', 'temperature_C', 'system_pressure_Pa', 'system_pressure_mbar',
                                      'vapor_pressure_Pa', 'vapor_pressure_mbar', 'pressure_ratio', 
                                      'will_evaporate', 'evaporation_rate', 'method']
@@ -476,7 +546,7 @@ def rotavapor_submenu():
                         writer.writeheader()
                         for row in results:
                             writer.writerow(row)
-                    print(f"Analysis saved as {filename}.csv")
+                    print(f"Analysis saved as: {filepath}")
                 except Exception as e:
                     print(f"Error saving file: {e}")
         else:

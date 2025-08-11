@@ -455,3 +455,21 @@ def calculate_rotavapor_conditions(cas, T_values, P_values):
     except Exception as e:
         print(f"Error calculating rotavapor conditions: {e}")
         return None
+
+def create_output_directory(cas):
+    """Create organized directory structure for output files."""
+    import os
+    
+    # Create main generated_data directory
+    main_dir = "generated_data"
+    if not os.path.exists(main_dir):
+        os.makedirs(main_dir)
+        print(f"Created directory: {main_dir}")
+    
+    # Create CAS-specific subdirectory
+    cas_dir = os.path.join(main_dir, cas)
+    if not os.path.exists(cas_dir):
+        os.makedirs(cas_dir)
+        print(f"Created directory: {cas_dir}")
+    
+    return cas_dir
