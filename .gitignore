@@ -5,4 +5,4 @@ thermo-master/
 fpi-master/
 chedl-master/
 *.csv
-
+generated_data/

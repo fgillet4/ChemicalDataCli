@@ -10,6 +10,8 @@ from chemdata.core.chemical_data import lookup_chemical, search_chemicals, get_a
 from chemdata.calculators.property_calculator import get_property_calculators, get_comparison_calculators, calculate_property, calculate_vapor_pressure_table, compare_vapor_pressure_methods, calculate_rotavapor_conditions, create_output_directory
 from chemdata.calculators.reaction_calculator import get_reaction_calculators, calculate_reaction_property
 from chemdata.calculators.element_calculator import get_element_data
+from chemdata.calculators.safety_calculator import get_safety_calculators, calculate_safety_property, comprehensive_safety_analysis, available_methods_for_chemical, unit_conversion_helper
+from chemdata.calculators.environmental_calculator import get_environmental_calculators, calculate_environmental_property, comprehensive_environmental_analysis, available_environmental_methods_for_chemical, environmental_comparison
 from chemdata.ui.formatters import print_section_header, print_property, format_value
 
 def property_calculator_menu():
@@ -222,6 +224,313 @@ def element_lookup_menu():
                 
         except Exception as e:
             print(f"Error looking up element {element}: {e}")
+
+def safety_analysis_menu():
+    """Menu for chemical safety analysis"""
+    while True:
+        print_section_header("Chemical Safety Analysis", "-")
+        print("1. Individual safety property lookup")
+        print("2. Comprehensive safety analysis")
+        print("3. Available safety analysis methods for a chemical")
+        print("4. Unit conversion helper")
+        print("Type 'back' to return to the main menu.")
+        
+        choice = input("\nSelect option: ").lower()
+        
+        if choice == 'back':
+            break
+        elif choice == '1':
+            safety_property_submenu()
+        elif choice == '2':
+            comprehensive_safety_submenu()
+        elif choice == '3':
+            available_methods_submenu()
+        elif choice == '4':
+            unit_conversion_helper()
+        else:
+            print("Invalid choice, please try again.")
+
+def safety_property_submenu():
+    """Submenu for individual safety property calculations"""
+    safety_props = get_safety_calculators()
+    
+    while True:
+        print_section_header("Individual Safety Properties", "-")
+        for key, (name, _, unit_desc) in safety_props.items():
+            print(f"{key}. {name}")
+        print("Type 'back' to return to safety menu.")
+        
+        choice = input("\nSelect safety property to calculate: ").lower()
+        
+        if choice == 'back':
+            break
+            
+        if choice in safety_props:
+            cas_or_name = input("Enter chemical name or CAS number: ")
+            
+            result = calculate_safety_property(choice, cas_or_name)
+            
+            if result:
+                property_name = result['property_name']
+                value = result['value']
+                unit_desc = result['unit_description']
+                
+                print(f"\n{property_name} for {result['name']} (CAS: {result['cas']}):")
+                print("=" * 60)
+                
+                if isinstance(value, tuple) and len(value) == 2:
+                    # For STEL, TWA, Ceiling which return (value, unit)
+                    print(f"Value: {value[0]} {value[1]}")
+                elif isinstance(value, bool):
+                    # For skin absorption
+                    print(f"Value: {'Yes' if value else 'No'}")
+                elif isinstance(value, dict):
+                    # For carcinogen status
+                    print("Carcinogen Classifications:")
+                    for source, status in value.items():
+                        print(f"  - {source}: {status}")
+                elif value is not None:
+                    print(f"Value: {value}")
+                    if unit_desc != "Returns (value, unit) where unit is ppm or mg/m³":
+                        print(f"Unit: {unit_desc}")
+                else:
+                    print("No data available")
+                
+                print(f"Unit Description: {unit_desc}")
+        else:
+            print("Invalid choice, please try again.")
+
+def comprehensive_safety_submenu():
+    """Submenu for comprehensive safety analysis"""
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        print("\nPerforming comprehensive safety analysis...")
+        result = comprehensive_safety_analysis(cas_or_name)
+        
+        if result:
+            # Ask if user wants to save to file
+            save_choice = input("\nWould you like to save this safety analysis to a file? (y/n): ").lower()
+            if save_choice in ['y', 'yes']:
+                filename = input("Enter filename (without extension): ") or f"safety_analysis_{result['cas']}"
+                try:
+                    import json
+                    import os
+                    from datetime import datetime
+                    
+                    # Create organized directory structure
+                    cas_dir = create_output_directory(result['cas'])
+                    
+                    # Add timestamp to filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    full_filename = f"{filename}_{timestamp}.json"
+                    filepath = os.path.join(cas_dir, full_filename)
+                    
+                    with open(filepath, 'w') as jsonfile:
+                        json.dump(result, jsonfile, indent=2)
+                    print(f"Safety analysis saved as: {filepath}")
+                except Exception as e:
+                    print(f"Error saving file: {e}")
+
+def available_methods_submenu():
+    """Submenu for showing available safety analysis methods"""
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        available_methods_for_chemical(cas_or_name)
+
+def environmental_analysis_menu():
+    """Menu for environmental impact analysis"""
+    while True:
+        print_section_header("Environmental Impact Analysis", "-")
+        print("1. Individual environmental property lookup")
+        print("2. Comprehensive environmental analysis")
+        print("3. Available environmental analysis methods for a chemical")
+        print("4. Compare environmental impacts of multiple chemicals")
+        print("Type 'back' to return to the main menu.")
+        
+        choice = input("\nSelect option: ").lower()
+        
+        if choice == 'back':
+            break
+        elif choice == '1':
+            environmental_property_submenu()
+        elif choice == '2':
+            comprehensive_environmental_submenu()
+        elif choice == '3':
+            available_environmental_methods_submenu()
+        elif choice == '4':
+            environmental_comparison_submenu()
+        else:
+            print("Invalid choice, please try again.")
+
+def environmental_property_submenu():
+    """Submenu for individual environmental property calculations"""
+    env_props = get_environmental_calculators()
+    
+    while True:
+        print_section_header("Individual Environmental Properties", "-")
+        for key, (name, _, unit_desc) in env_props.items():
+            print(f"{key}. {name}")
+        print("Type 'back' to return to environmental menu.")
+        
+        choice = input("\nSelect environmental property to calculate: ").lower()
+        
+        if choice == 'back':
+            break
+            
+        if choice in env_props:
+            cas_or_name = input("Enter chemical name or CAS number: ")
+            
+            result = calculate_environmental_property(choice, cas_or_name)
+            
+            if result:
+                property_name = result['property_name']
+                value = result['value']
+                unit_desc = result['unit_description']
+                
+                print(f"\n{property_name} for {result['name']} (CAS: {result['cas']}):")
+                print("=" * 60)
+                
+                if value is not None:
+                    print(f"Value: {value}")
+                    print(f"Unit: {unit_desc}")
+                    
+                    # Additional interpretation for specific properties
+                    if "GWP" in property_name and isinstance(value, (int, float)):
+                        if value > 1000:
+                            print("Impact: EXTREMELY HIGH climate impact")
+                        elif value > 100:
+                            print("Impact: HIGH climate impact")
+                        elif value > 10:
+                            print("Impact: MODERATE climate impact")
+                        elif value > 1:
+                            print("Impact: LOW climate impact")
+                        else:
+                            print("Impact: Minimal climate impact")
+                    
+                    elif "ODP" in property_name and isinstance(value, (int, float)):
+                        if value > 1.0:
+                            print("Impact: EXTREMELY HIGH ozone depletion risk")
+                        elif value > 0.1:
+                            print("Impact: HIGH ozone depletion risk")
+                        elif value > 0.01:
+                            print("Impact: MODERATE ozone depletion risk")
+                        elif value > 0:
+                            print("Impact: LOW ozone depletion risk")
+                        else:
+                            print("Impact: No ozone depletion risk")
+                    
+                    elif "logP" in property_name and isinstance(value, (int, float)):
+                        if value > 5:
+                            print("Bioaccumulation: VERY HIGH potential")
+                        elif value > 3:
+                            print("Bioaccumulation: HIGH potential")
+                        elif value > 1:
+                            print("Bioaccumulation: MODERATE potential")
+                        else:
+                            print("Bioaccumulation: LOW potential")
+                        
+                        if value > 0:
+                            print("Solubility: More lipophilic (fat-soluble)")
+                        else:
+                            print("Solubility: More hydrophilic (water-soluble)")
+                else:
+                    print("No data available")
+        else:
+            print("Invalid choice, please try again.")
+
+def comprehensive_environmental_submenu():
+    """Submenu for comprehensive environmental analysis"""
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        print("\nPerforming comprehensive environmental analysis...")
+        result = comprehensive_environmental_analysis(cas_or_name)
+        
+        if result:
+            # Ask if user wants to save to file
+            save_choice = input("\nWould you like to save this environmental analysis to a file? (y/n): ").lower()
+            if save_choice in ['y', 'yes']:
+                filename = input("Enter filename (without extension): ") or f"environmental_analysis_{result['cas']}"
+                try:
+                    import json
+                    import os
+                    from datetime import datetime
+                    
+                    # Create organized directory structure
+                    cas_dir = create_output_directory(result['cas'])
+                    
+                    # Add timestamp to filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    full_filename = f"{filename}_{timestamp}.json"
+                    filepath = os.path.join(cas_dir, full_filename)
+                    
+                    with open(filepath, 'w') as jsonfile:
+                        json.dump(result, jsonfile, indent=2)
+                    print(f"Environmental analysis saved as: {filepath}")
+                except Exception as e:
+                    print(f"Error saving file: {e}")
+
+def available_environmental_methods_submenu():
+    """Submenu for showing available environmental analysis methods"""
+    while True:
+        cas_or_name = input("\nEnter chemical name or CAS number (or 'back' to return): ")
+        if cas_or_name.lower() == 'back':
+            break
+            
+        available_environmental_methods_for_chemical(cas_or_name)
+
+def environmental_comparison_submenu():
+    """Submenu for comparing environmental impacts of multiple chemicals"""
+    while True:
+        chemical_input = input("\nEnter chemical names or CAS numbers separated by commas (or 'back' to return): ")
+        if chemical_input.lower() == 'back':
+            break
+            
+        chemicals = [c.strip() for c in chemical_input.split(',')]
+        
+        if len(chemicals) < 2:
+            print("Please enter at least 2 chemicals for comparison.")
+            continue
+        
+        print("\nPerforming environmental comparison...")
+        result = environmental_comparison(chemicals)
+        
+        if result:
+            # Ask if user wants to save to file
+            save_choice = input("\nWould you like to save this comparison to a CSV file? (y/n): ").lower()
+            if save_choice in ['y', 'yes']:
+                filename = input("Enter filename (without extension): ") or "environmental_comparison"
+                try:
+                    import csv
+                    import os
+                    from datetime import datetime
+                    
+                    # Create directory if needed
+                    if not os.path.exists("generated_data"):
+                        os.makedirs("generated_data")
+                    
+                    # Add timestamp to filename
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    full_filename = f"{filename}_{timestamp}.csv"
+                    filepath = os.path.join("generated_data", full_filename)
+                    
+                    with open(filepath, 'w', newline='') as csvfile:
+                        fieldnames = ['name', 'cas', 'gwp', 'gtp', 'odp', 'logp']
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        for row in result:
+                            writer.writerow(row)
+                    print(f"Comparison saved as: {filepath}")
+                except Exception as e:
+                    print(f"Error saving file: {e}")
 
 def vapor_pressure_menu():
     """Enhanced vapor pressure calculation menu with multiple options"""
@@ -568,7 +877,9 @@ Chemical Data CLI
 6. Look up element data from the periodic table
 7. Get ALL available properties for a chemical
 8. Calculate vapor pressure tables
-9. Exit
+9. Chemical safety analysis
+10. Environmental impact analysis
+11. Exit
         """)
         
         choice = input("Enter your choice: ")
@@ -611,6 +922,12 @@ Chemical Data CLI
             vapor_pressure_menu()
             
         elif choice == '9':
+            safety_analysis_menu()
+            
+        elif choice == '10':
+            environmental_analysis_menu()
+            
+        elif choice == '11':
             print("Exiting. Thank you for using Chemical Data CLI!")
             break
             
