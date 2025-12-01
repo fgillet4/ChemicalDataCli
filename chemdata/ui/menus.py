@@ -915,7 +915,16 @@ Chemical Data CLI
             
         elif choice == '7':
             cas_or_name = input("Enter chemical name or CAS number: ")
-            get_all_properties(cas_or_name)
+            temp_input = input("Enter temperature in K (press Enter for 298.15 K / 25°C): ").strip()
+            if temp_input:
+                try:
+                    T = float(temp_input)
+                    get_all_properties(cas_or_name, T=T)
+                except ValueError:
+                    print("Invalid temperature. Using default 298.15 K.")
+                    get_all_properties(cas_or_name)
+            else:
+                get_all_properties(cas_or_name)
             input("\nPress Enter to continue...")
             
         elif choice == '8':

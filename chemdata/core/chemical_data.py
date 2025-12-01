@@ -12,6 +12,7 @@ try:
     from chemicals import triple, vapor_pressure, virial, acentric, lennard_jones
     from chemicals import safety, environment, elements, reaction, refractivity
     from chemicals import miscdata, air, temperature, permittivity, solubility
+    from thermo.interface import SurfaceTension
 except ImportError:
     print("Required libraries not found. Make sure chemicals is installed.")
     print("Try: pip install chemicals thermo fluids ht")
@@ -191,7 +192,8 @@ def lookup_chemical(cas_or_name):
                 pass
                 
             try:
-                results["phase"]["surface_tension"] = interface.sigma(cas, T=298.15)
+                st = SurfaceTension(CASRN=cas)
+                results["phase"]["surface_tension"] = st(T=298.15)
             except:
                 pass
                 
@@ -469,8 +471,13 @@ def search_chemicals(query, limit=10):
         print("Try searching by CAS number instead.")
         return []
 
-def get_all_properties(cas_or_name):
-    """Calculate and display all available properties for a chemical"""
+def get_all_properties(cas_or_name, T=298.15):
+    """Calculate and display all available properties for a chemical at a given temperature
+    
+    Args:
+        cas_or_name: CAS number or chemical name
+        T: Temperature in Kelvin (default: 298.15 K = 25°C)
+    """
     
     # Validate and convert to CAS if necessary
     cas = None
@@ -494,76 +501,79 @@ def get_all_properties(cas_or_name):
         name = cas_or_name
             
     print(f"\nAll Properties for: {name} (CAS: {cas})")
+    print(f"Temperature: {T} K ({T-273.15:.2f}°C)")
     print("=" * 60)
     
     # Dictionary of all property calculations
     properties = {
         "Critical Temperature": 
-            (lambda: critical.Tc(cas), "K"),
+            (lambda: critical.Tc(cas), "K", None),
         "Critical Pressure": 
-            (lambda: critical.Pc(cas), "Pa"),
+            (lambda: critical.Pc(cas), "Pa", None),
         "Critical Volume": 
-            (lambda: critical.Vc(cas), "m³/mol"),
+            (lambda: critical.Vc(cas), "m³/mol", None),
         "Critical Compressibility": 
-            (lambda: critical.Zc(cas), "dimensionless"),
+            (lambda: critical.Zc(cas), "dimensionless", None),
         "Boiling Point": 
-            (lambda: phase_change.Tb(cas), "K"),
+            (lambda: phase_change.Tb(cas), "K", None),
         "Melting Point": 
-            (lambda: phase_change.Tm(cas), "K"),
+            (lambda: phase_change.Tm(cas), "K", None),
         "Heat of Fusion": 
-            (lambda: phase_change.Hfus(cas), "J/mol"),
+            (lambda: phase_change.Hfus(cas), "J/mol", None),
         "Surface Tension": 
-            (lambda: interface.sigma(cas, T=298.15), "N/m"),
+            (lambda: (lambda st: (st(T=T), f"N/m ({st.method})"))(SurfaceTension(CASRN=cas)), "", T),
         "Vapor Pressure": 
-            (lambda: vapor_pressure.Psat(cas, T=298.15), "Pa"),
+            (lambda: vapor_pressure.Psat(cas, T=T), "Pa", T),
         "Acentric Factor": 
-            (lambda: acentric.omega(cas), "dimensionless"),
+            (lambda: acentric.omega(cas), "dimensionless", None),
         "Dipole Moment": 
-            (lambda: dipole.dipole_moment(cas), "debye"),
+            (lambda: dipole.dipole_moment(cas), "debye", None),
         "Molecular Weight": 
-            (lambda: identifiers.MW(cas), "g/mol"),
+            (lambda: identifiers.MW(cas), "g/mol", None),
         "Heat of Formation (Gas)": 
-            (lambda: reaction.Hfg(cas), "J/mol"),
+            (lambda: reaction.Hfg(cas), "J/mol", None),
         "Heat of Formation (Liquid)": 
-            (lambda: reaction.Hfl(cas), "J/mol"),
+            (lambda: reaction.Hfl(cas), "J/mol", None),
         "Standard Entropy (Gas)": 
-            (lambda: reaction.S0g(cas), "J/(mol·K)"),
+            (lambda: reaction.S0g(cas), "J/(mol·K)", None),
         "Liquid Volume (COSTALD)": 
-            (lambda: volume.COSTALD(T=298.15, Tc=critical.Tc(cas), Vc=critical.Vc(cas), omega=acentric.omega(cas)), "m³/mol"),
+            (lambda: volume.COSTALD(T=T, Tc=critical.Tc(cas), Vc=critical.Vc(cas), omega=acentric.omega(cas)), "m³/mol", T),
+        "Liquid Density (COSTALD)": 
+            (lambda: identifiers.MW(cas) / volume.COSTALD(T=T, Tc=critical.Tc(cas), Vc=critical.Vc(cas), omega=acentric.omega(cas)) / 1000, "kg/m³", T),
         "Liquid Density (Rackett)": 
-            (lambda: 1.0/(volume.Rackett(T=298.15, Tc=critical.Tc(cas), Pc=critical.Pc(cas), omega=acentric.omega(cas))*identifiers.MW(cas)), "kg/m³"),
+            (lambda: identifiers.MW(cas) / volume.Rackett(T=T, Tc=critical.Tc(cas), Pc=critical.Pc(cas), omega=acentric.omega(cas)) / 1000, "kg/m³", T),
         "Gas Viscosity (Lucas)": 
-            (lambda: viscosity.Lucas_gas(T=298.15, Tc=critical.Tc(cas), Pc=critical.Pc(cas), Zc=critical.Zc(cas), MW=identifiers.MW(cas), dipole=dipole.dipole_moment(cas)), "Pa·s"),
+            (lambda: viscosity.Lucas_gas(T=T, Tc=critical.Tc(cas), Pc=critical.Pc(cas), Zc=critical.Zc(cas), MW=identifiers.MW(cas), dipole=dipole.dipole_moment(cas)), "Pa·s", T),
         "Liquid Viscosity (Letsou-Stiel)": 
-            (lambda: viscosity.Letsou_Stiel(T=298.15, MW=identifiers.MW(cas), Tc=critical.Tc(cas), Pc=critical.Pc(cas), omega=acentric.omega(cas)), "Pa·s"),
+            (lambda: viscosity.Letsou_Stiel(T=T, MW=identifiers.MW(cas), Tc=critical.Tc(cas), Pc=critical.Pc(cas), omega=acentric.omega(cas)), "Pa·s", T),
         "Liquid Thermal Conductivity": 
-            (lambda: thermal_conductivity.Sheffy_Johnson(T=298.15, MW=identifiers.MW(cas), Tc=critical.Tc(cas), Pc=critical.Pc(cas), omega=acentric.omega(cas)), "W/(m·K)"),
+            (lambda: thermal_conductivity.Sheffy_Johnson(T=T, MW=identifiers.MW(cas), Tc=critical.Tc(cas), Pc=critical.Pc(cas), omega=acentric.omega(cas)), "W/(m·K)", T),
         "Gas Thermal Conductivity": 
-            (lambda: thermal_conductivity.Eli_Hanley(T=298.15, MW=identifiers.MW(cas), Tc=critical.Tc(cas), Vc=critical.Vc(cas), Zc=critical.Zc(cas), omega=acentric.omega(cas), dipole=dipole.dipole_moment(cas)), "W/(m·K)"),
+            (lambda: thermal_conductivity.Eli_Hanley(T=T, MW=identifiers.MW(cas), Tc=critical.Tc(cas), Vc=critical.Vc(cas), Zc=critical.Zc(cas), omega=acentric.omega(cas), dipole=dipole.dipole_moment(cas)), "W/(m·K)", T),
         "Hansen Solubility Parameter (Dispersion)": 
-            (lambda: solubility.hansen_delta_d(cas), "Pa^0.5"),
+            (lambda: solubility.hansen_delta_d(cas), "Pa^0.5", None),
         "Hansen Solubility Parameter (Polar)": 
-            (lambda: solubility.hansen_delta_p(cas), "Pa^0.5"),
+            (lambda: solubility.hansen_delta_p(cas), "Pa^0.5", None),
         "Hansen Solubility Parameter (Hydrogen Bonding)": 
-            (lambda: solubility.hansen_delta_h(cas), "Pa^0.5"),
+            (lambda: solubility.hansen_delta_h(cas), "Pa^0.5", None),
         "Triple Point Temperature": 
-            (lambda: triple.Tt(cas), "K"),
+            (lambda: triple.Tt(cas), "K", None),
         "Triple Point Pressure": 
-            (lambda: triple.Pt(cas), "Pa"),
+            (lambda: triple.Pt(cas), "Pa", None),
         "Flash Point": 
-            (lambda: safety.Tflash(cas), "K"),
+            (lambda: safety.Tflash(cas), "K", None),
         "Autoignition Temperature": 
-            (lambda: safety.Tautoignition(cas), "K"),
+            (lambda: safety.Tautoignition(cas), "K", None),
         "Lower Flammability Limit": 
-            (lambda: safety.LFL(cas), "fraction"),
+            (lambda: safety.LFL(cas), "fraction", None),
         "Upper Flammability Limit": 
-            (lambda: safety.UFL(cas), "fraction"),
+            (lambda: safety.UFL(cas), "fraction", None),
         "Global Warming Potential": 
-            (lambda: environment.GWP(cas), "relative to CO₂"),
+            (lambda: environment.GWP(cas), "relative to CO₂", None),
         "Ozone Depletion Potential": 
-            (lambda: environment.ODP(cas), "relative to CFC-11"),
+            (lambda: environment.ODP(cas), "relative to CFC-11", None),
         "Log P (Octanol-Water Partition)": 
-            (lambda: environment.logP(cas), "logarithmic")
+            (lambda: environment.logP(cas), "logarithmic", None)
     }
     
     # Calculate polarity classification separately
@@ -571,7 +581,7 @@ def get_all_properties(cas_or_name):
         dipole_value = dipole.dipole_moment(cas)
         if dipole_value is not None:
             polarity = determine_polarity(cas)
-            properties["Polarity Classification"] = (lambda: polarity, "")
+            properties["Polarity Classification"] = (lambda: polarity, "", None)
     except:
         pass
     
@@ -579,11 +589,19 @@ def get_all_properties(cas_or_name):
     results = []
     
     # First pass: get all properties
-    for prop_name, (calc_func, unit) in properties.items():
+    for prop_name, prop_data in properties.items():
+        calc_func, unit, temp = prop_data
         try:
             value = calc_func()
             if value is not None:
-                results.append((prop_name, value, unit))
+                # Handle tuple return (value, unit_with_method)
+                if isinstance(value, tuple) and len(value) == 2:
+                    if temp is not None:
+                        results.append((prop_name, value[0], value[1], temp))
+                    else:
+                        results.append((prop_name, value[0], value[1], None))
+                else:
+                    results.append((prop_name, value, unit, temp))
         except:
             pass
     
@@ -606,7 +624,7 @@ def get_all_properties(cas_or_name):
         category_results = [r for r in results if any(p in r[0] for p in props)]
         if category_results:
             print(f"\n{category.upper()}:")
-            for prop_name, value, unit in category_results:
+            for prop_name, value, unit, temp in category_results:
                 displayed_props.add(prop_name)
                 if isinstance(value, float):
                     if abs(value) < 0.001 or abs(value) > 10000:
@@ -616,16 +634,19 @@ def get_all_properties(cas_or_name):
                 else:
                     formatted_value = str(value)
                 
+                # Add temperature annotation if applicable
+                temp_str = f" @ {temp} K" if temp is not None else ""
+                
                 if unit:
-                    print(f"  {prop_name}: {formatted_value} {unit}")
+                    print(f"  {prop_name}: {formatted_value} {unit}{temp_str}")
                 else:
-                    print(f"  {prop_name}: {formatted_value}")
+                    print(f"  {prop_name}: {formatted_value}{temp_str}")
     
     # Display any remaining properties not in categories
     remaining = [r for r in results if r[0] not in displayed_props]
     if remaining:
         print("\nOTHER PROPERTIES:")
-        for prop_name, value, unit in remaining:
+        for prop_name, value, unit, temp in remaining:
             if isinstance(value, float):
                 if abs(value) < 0.001 or abs(value) > 10000:
                     formatted_value = f"{value:.6e}"
@@ -634,10 +655,13 @@ def get_all_properties(cas_or_name):
             else:
                 formatted_value = str(value)
             
+            # Add temperature annotation if applicable
+            temp_str = f" @ {temp} K" if temp is not None else ""
+            
             if unit:
-                print(f"  {prop_name}: {formatted_value} {unit}")
+                print(f"  {prop_name}: {formatted_value} {unit}{temp_str}")
             else:
-                print(f"  {prop_name}: {formatted_value}")
+                print(f"  {prop_name}: {formatted_value}{temp_str}")
     
     # Show count of available properties
     print(f"\nTotal properties found: {len(results)} out of {len(properties)}")
